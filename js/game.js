@@ -12,14 +12,17 @@ define(function (require) {
   var SPRITE_WIDTH  = 12 * 3;
   var SPRITE_HEIGHT = 12 * 3;
 
+  var PLAYER_HEALTH = 10;
+
   var PLAYER_SPEED = 80;
   var ROBBER_SPEED = 30;
 
   var ROBBER_SPAWN_INTERVAL = 10;
-  var ROBBER_SPAWN_SCALE    = 0.9;
+  var ROBBER_SPAWN_SCALE    = 0.98;
 
-  var ROBBER_AIM_TIME      = 2.0;
-  var ROBBER_FIRE_DELAY    = 0.2;
+  var ROBBER_STOP_TIME     = 1.0;
+  var ROBBER_AIM_TIME      = 3.0;
+  var ROBBER_FIRE_DELAY    = 0.5;
   var ROBBER_COOLDOWN_TIME = 1.0;
 
   var _imageCache = {};
@@ -134,8 +137,10 @@ define(function (require) {
       robber_spawn_interval: ROBBER_SPAWN_INTERVAL
     }
 
-    this.player = createPlayer();
+    this.player  = createPlayer();
     this.robbers = [ createRobber() ];
+    this.bodies  = [];
+    this.effects = [];
 
     this.t = 0;
     this.runLoop();
@@ -150,7 +155,7 @@ define(function (require) {
       // calculate FPS
       frameCount += 1;
       if (Date.now() > frameStart + 1000) {
-        console.log(frameCount + " fps");
+        //console.log(frameCount + " fps");
         frameCount = 0;
         frameStart = Date.now();
       }
@@ -206,7 +211,8 @@ define(function (require) {
     return {
       x: Math.random() < 0.5 ? -SPRITE_WIDTH / 2 : WIDTH + SPRITE_WIDTH / 2,
       y: Math.random() * HEIGHT,
-      type: 'robber'
+      type:  'robber',
+      heatlh: 1
     }
   }
 
@@ -214,14 +220,16 @@ define(function (require) {
     return {
       x: WIDTH / 2,
       y: HEIGHT / 2,
-      type: 'player'
+      type:   'player',
+      health: PLAYER_HEALTH
     }
   }
 
   var ROBBER_RUN  = 0;
-  var ROBBER_WAIT = 1;
-  var ROBBER_FIRE = 2;
-  var ROBBER_COOL = 3;
+  var ROBBER_STOP = 1;
+  var ROBBER_AIM  = 2;
+  var ROBBER_FIRE = 3;
+  var ROBBER_COOL = 4;
 
   function chooseRobberRunGoal (robber) {
     var xRange = WIDTH * 0.3;
@@ -247,7 +255,24 @@ define(function (require) {
     if (Math.sqrt(vx * vx + vy * vy) < 1) {
       delete robber.run_x;
       delete robber.run_y;
-      robber.state = ROBBER_WAIT;
+      robber.state = ROBBER_STOP;
+    }
+  }
+
+  function thinkRobberStop (dt, t, robber) {
+    if (robber.stop_time == undefined) {
+      robber.stop_time = t + ROBBER_STOP_TIME;
+    }
+
+    robber.vx = 0;
+    robber.vy = 0;
+    robber.v  = 0;
+    robber.dir = robber.x < WIDTH / 2 ? 1 : -1;
+
+    if (t > robber.stop_time) {
+      robber.state = ROBBER_AIM;
+      delete robber.stop_time;
+      return;
     }
   }
 
@@ -256,14 +281,7 @@ define(function (require) {
       robber.aim_time = t + ROBBER_AIM_TIME;
     }
 
-    robber.vx = 0;
-    robber.vy = 0;
-    robber.v  = 0;
-    robber.dir = robber.x < WIDTH / 2 ? 1 : -1;
-
-    var x = robber.x + robber.dir * SPRITE_WIDTH * 0.75;
-    var y = robber.y;
-    var intersection = rayTracer(x, y, robber.dir);
+    var intersection = rayTracer(robber.x, robber.y, robber.dir);
 
     if (intersection !== null) {
       if (intersection.character.type === 'player') {
@@ -298,7 +316,6 @@ define(function (require) {
     }
 
     if (t > robber.cool_time) {
-      robber.firing = true;
       robber.state = ROBBER_RUN;
       delete robber.cool_time;
       return;
@@ -312,7 +329,9 @@ define(function (require) {
 
     if (robber.state == ROBBER_RUN) {
       thinkRobberRun(dt, t, robber);
-    } else if (robber.state == ROBBER_WAIT) {
+    } else if (robber.state == ROBBER_STOP) {
+      thinkRobberStop(dt, t, robber);
+    } else if (robber.state == ROBBER_AIM) {
       thinkRobberAim(dt, t, robber, rayTracer);
     } else if (robber.state == ROBBER_FIRE) {
       thinkRobberFire(dt, t, robber);
@@ -341,31 +360,33 @@ define(function (require) {
     }
   }
 
-  Game.prototype.rayTrace = function (x, y, dir) {
-    function intersects (character) {
-      var dy = character.y - y;
-      if (Math.abs(dy) > SPRITE_HEIGHT / 2) return -1;
-      var dx = character.x - x;
-      if (dx * dir > 0) return Math.abs(dx);
-      return -1;
-    }
+  function generateRayTracer (all) {
+    return function (x, y, dir) {
+      x += dir * SPRITE_WIDTH * 0.75;
 
-    var result = null;
-
-    var all = [this.player].concat(this.robbers);
-    for (var i in all) {
-      var character = all[i];
-      var distance = intersects(character);
-
-      if (distance === -1) continue;
-      if (result === null || distance < result.distance) {
-        if (result === null) result = {};
-        result.distance = distance;
-        result.character = character;
+      function intersects (character) {
+        var dy = character.y - y;
+        if (Math.abs(dy) > SPRITE_HEIGHT / 2) return -1;
+        var dx = character.x - x;
+        if (dx * dir > 0) return Math.abs(dx);
+        return -1;
       }
-    }
 
-    return result;
+      var result = null;
+      for (var i in all) {
+        var character = all[i];
+        var distance = intersects(character);
+
+        if (distance === -1) continue;
+        if (result === null || distance < result.distance) {
+          if (result === null) result = {};
+          result.distance = distance;
+          result.character = character;
+        }
+      }
+
+      return result;
+    }
   }
 
   function spawnRobbers(t, robbers, state) {
@@ -377,19 +398,51 @@ define(function (require) {
     }
   }
 
+  function renderCharacters(context, characters, dt) {
+    var sorted = _.sortBy(characters, function (character) {
+      return character.y
+    });
+
+    for (var i in sorted) {
+      renderCharacter(context, sorted[i], dt);
+    }
+  }
+
+  function thinkFiring(t, all, effects, rayTracer) {
+    for (var i in all) {
+      var character = all[i];
+      if (!character.firing) continue;
+      character.firing = false;
+
+      var intersection = rayTracer(character.x, character.y, character.dir);
+      var distance = intersection ? intersection.distance : WIDTH;
+
+      effects.push({
+        x: character.x + SPRITE_WIDTH
+        t: t
+      });
+
+      if (intersection !== null) {
+        intersection.character.health --;
+        console.log("HIT", intersection.character));
+      }
+    }
+  }
+
   Game.prototype.step = function(dt) {
     this.t += dt;
 
     spawnRobbers(this.t, this.robbers, this.state);
 
+    var allCharacters = [this.player].concat(this.robbers);
+    var rayTracer     = generateRayTracer(allCharacters);
+
     thinkPlayer(dt, this.inputs, this.player);
-    thinkRobbers(dt, this.t, this.robbers, this.rayTrace.bind(this));
+    thinkRobbers(dt, this.t, this.robbers, rayTracer);
+    thinkFiring(t, allCharacters, this.effects rayTracer);
 
     renderBackground(this.bufferContext);
-    renderCharacter(this.bufferContext, this.player, dt);
-    for (var i in this.robbers) {
-      renderCharacter(this.bufferContext, this.robbers[i], dt);
-    }
+    renderCharacters(this.bufferContext, allCharacters, dt);
 
     drawBuffer(this.canvasContext, this.buffer);
   }
