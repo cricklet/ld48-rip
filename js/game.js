@@ -9,8 +9,8 @@ define(function (require) {
   var WIDTH  = 20 * 12 * 3;
   var HEIGHT = 5 * 12 * 3;
 
-  var SPRITE_WIDTH  = 12 * 3;
-  var SPRITE_HEIGHT = 12 * 3;
+  var SPRITE_WIDTH  = 14 * 3;
+  var SPRITE_HEIGHT = 14 * 3;
 
   var PLAYER_HEALTH = 10;
 
