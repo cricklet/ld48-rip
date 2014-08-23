@@ -12,7 +12,10 @@ define(function (require) {
   var SPRITE_WIDTH  = 12 * 3;
   var SPRITE_HEIGHT = 12 * 3;
 
-  var PLAYER_SPEED = 0.05;
+  var PLAYER_SPEED = 0.1;
+
+  var ROBBER_SPAWN_INTERVAL = 10000;
+  var ROBBER_SPAWN_SCALE    = 0.9;
 
   var _imageCache = {};
   function png2Image(png) {
@@ -122,8 +125,9 @@ define(function (require) {
       y: HEIGHT / 2
     }
 
-    this.robbers = [];
+    this.robbers = [ {x: 50, y: 50} ];
 
+    this.t = 0;
     this.runLoop();
   }
 
@@ -150,7 +154,7 @@ define(function (require) {
     loop.bind(this)();
   }
 
-  function thinkPlayer(dt, inputs, player) {
+  function thinkPlayer (dt, inputs, player) {
     var vx = 0;
     var vy = 0;
     if (inputs.w) vy -= 1;
@@ -184,15 +188,47 @@ define(function (require) {
     if (player.vx < -0.01) player.dir = -1;
   }
 
-  function thinkRobbers(dt, robbers, player) {
+  function createRobber () {
+    return { x: 20, y: 20 }
+  }
+
+  function thinkRobber (dt, t, robber) {
+    robber.vx = 0;
+    robber.vy = 0;
+    robber.v  = 0;
+
+    if (robber.animation === undefined) {
+      robber.animation = 'robber_idle';
+    }
+
+    if (robber.v < 0.01) {
+      robber.animation = 'robber_idle';
+    } else {
+      robber.animation = 'robber_run';
+    }
+
+    if (robber.vx > 0.01)  robber.dir = 1;
+    if (robber.vx < -0.01) robber.dir = -1;
+  }
+
+  function thinkRobbers (dt, t, robbers) {
+    for (var i in robbers) {
+      var robber = robbers[i];
+      thinkRobber(dt, t, robber);
+    }
   }
 
   Game.prototype.step = function(dt) {
+    this.t += dt;
+
     thinkPlayer(dt, this.inputs, this.player);
-    thinkRobbers(dt, this.robbers, this.plapyer);
+    thinkRobbers(dt, this.t, this.robbers);
 
     renderBackground(this.bufferContext);
     renderCharacter(this.bufferContext, this.player, dt);
+    for (var i in this.robbers) {
+      renderCharacter(this.bufferContext, this.robbers[i], dt);
+    }
 
     drawBuffer(this.canvasContext, this.buffer);
   }
