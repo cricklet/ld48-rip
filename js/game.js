@@ -41,6 +41,9 @@ define(function (require) {
   var GUNFIRE_OFFSET_Y    = 1 * 3;
   var GUNFIRE_RENDER_TIME = 0.1;
 
+  var GHOST_ATTRACTIVE_FORCE = 160;
+  var GHOST_MAX_SPEED        = 40;
+
   var _imageCache = {};
   function png2Image(png) {
     if (png in _imageCache) {
@@ -66,7 +69,8 @@ define(function (require) {
       robber_idle_shoot: _.map(['sprites/8.png'], png2Image),
       robber_run:        _.map(['sprites/2.png', 'sprites/3.png'], png2Image),
       body:              _.map(['sprites/4.png'], png2Image),
-      shadow:            _.map(['sprites/11.png'], png2Image)
+      shadow:            _.map(['sprites/11.png'], png2Image),
+      puddle:            _.map(['sprites/13.png'], png2Image)
     },
     1: { // night
       player_idle:  _.map(['sprites/0a.png', 'sprites/0b.png'], png2Image),
@@ -74,13 +78,15 @@ define(function (require) {
       body:         _.map(['sprites/5.png'], png2Image),
       body_burning: _.map(['sprites/6a.png', 'sprites/6b.png'], png2Image),
       ghost:        _.map(['sprites/7.png'], png2Image),
-      shadow:       _.map(['sprites/11.png'], png2Image)
+      shadow:       _.map(['sprites/11.png'], png2Image),
+      puddle:       _.map(['sprites/12.png'], png2Image)
     }
   }
 
   SOUNDS = {
     gunfire: new H.Howl({urls: ['audio/shot.wav']}),
-    step:    new H.Howl({urls: ['audio/step.wav']})
+    step:    new H.Howl({urls: ['audio/step.wav']}),
+    thunder: new H.Howl({urls: ['audio/thunder.wav']})
   }
 
   function setCharacterAnimation (character, animation) {
@@ -313,6 +319,8 @@ define(function (require) {
     this.player  = createPlayer();
     this.robbers = [ createRobber() ];
     this.bodies  = [];
+    this.ghosts  = [];
+    this.puddles = [];
     this.effects = [];
 
     H.Howler.volume(0.1);
@@ -402,6 +410,16 @@ define(function (require) {
     }
   }
 
+  function createRobberFromBody (body) {
+    return {
+      x: body.x,
+      y: body.y + 4,
+      size:  ROBBER_SIZE,
+      type:  'robber',
+      health: 1
+    }
+  }
+
   function createBody (robber) {
     return {
       x: robber.x,
@@ -410,6 +428,27 @@ define(function (require) {
       type: 'body',
       dir:  -robber.hit_dir,
       animation: 'body'
+    }
+  }
+
+  function createPuddle (body) {
+    return {
+      x: body.x,
+      y: body.y,
+      size: BODY_SIZE,
+      type: 'puddle',
+      dir:  body.dir,
+      animation: 'puddle'
+    }
+  }
+
+  function createGhost (robber) {
+    return {
+      x: robber.x,
+      y: robber.y,
+      size: GHOST_SIZE,
+      type: 'ghost',
+      animation: 'ghost'
     }
   }
 
@@ -644,8 +683,7 @@ define(function (require) {
     }
   }
 
-  function renderAll(context, characters, bodies, effects, state, dt) {
-    var all = characters.concat(effects).concat(bodies);
+  function renderAll(context, all, state, dt) {
     var sorted = _.sortBy(all, function (obj) {
       return obj.y
     });
@@ -654,7 +692,8 @@ define(function (require) {
       var obj = sorted[i];
       if (obj.type === 'player'
           || obj.type === 'robber'
-          || obj.type === 'ghost') {
+          || obj.type === 'ghost'
+          || obj.type === 'puddle') {
         renderCharacter(context, obj, state, dt);
       }
       if (obj.type === 'body') {
@@ -724,11 +763,87 @@ define(function (require) {
     }
   }
 
-  function thinkDead (player, robbers, bodies) {
+  function thinkGhosts(dt, ghosts, player) {
+    for (var i in ghosts) {
+      var ghost0 = ghosts[i];
+      ghost0.fx = 0;
+      ghost0.fy = 0;
+
+      // repulsive force
+      for (var j in ghosts) {
+        if (j === i) continue;
+        var ghost1 = ghosts[j];
+
+
+      }
+
+      // attractive force
+      var dx = player.x - ghost0.x;
+      var dy = player.y - ghost0.y;
+      var d  = Math.sqrt(dx*dx + dy*dy);
+      ghost0.fx += GHOST_ATTRACTIVE_FORCE * dx / d;
+      ghost0.fy += GHOST_ATTRACTIVE_FORCE * dy / d;
+    }
+
+    for (var i in ghosts) {
+      var ghost = ghosts[i];
+      var vx = ghost.vx === undefined ? 0 : ghost.vx;
+      var vy = ghost.vy === undefined ? 0 : ghost.vy;
+      vx += dt * ghost.fx;
+      vy += dt * ghost.fy;
+      var v  = clamp(Math.sqrt(vx*vx + vy*vy), 0, GHOST_MAX_SPEED);
+      moveCharacter(dt, ghost, vx, vy, v);
+    }
+
+    // reanimate body if touching the player
+    for (var i in ghosts) {
+      var ghost = ghosts[i];
+      var dx = player.x - ghost.x;
+      var dy = player.y - ghost.y;
+      var d  = Math.sqrt(dx*dx + dy*dy);
+
+      if (d < ghost.size) {
+        ghost.reanimate = true;
+      }
+    }
+  }
+
+  function thinkReanimate(ghosts, robbers, puddles) {
+    for (var i in ghosts) {
+      var ghost = ghosts[i];
+      var body  = ghost.body;
+      if (ghost.reanimate !== true) continue;
+
+      SOUNDS.thunder.play();
+
+      robbers.push(createRobberFromBody(body));
+      puddles.push(createPuddle(body));
+
+      body.remove = true;
+      ghost.remove = true;
+    }
+  }
+
+  function thinkBounds(all) {
+    for (var i in all) {
+      var obj = all[i];
+      obj.x = clamp(obj.x, obj.size / 2, WIDTH - obj.size / 2);
+      obj.y = clamp(obj.y, obj.size / 2, HEIGHT - obj.size / 2);
+    }
+  }
+
+  function thinkDead (player, robbers, bodies, ghosts) {
     for (var i in robbers) {
       var robber = robbers[i];
       if (robber.health <= 0) {
-        bodies.push(createBody(robber));
+        var body = createBody(robber);
+        var ghost = createGhost(robber);
+        body.ghost = ghost;
+        ghost.body = body;
+
+        bodies.push(body);
+        ghosts.push(ghost);
+
         robber.dead = true;
       }
     }
@@ -743,29 +858,46 @@ define(function (require) {
     thinkAudio(this.inputs);
     thinkPlayer(dt, this.inputs, this.player, this.state);
 
-    var allCharacters = [];
+    var renderObjs = [];
 
     if (this.state.time == STATE_DAY) {
-      allCharacters = [this.player].concat(this.robbers);
+      renderObjs  = [this.player].concat(this.robbers)
+        .concat(this.puddles).concat(this.effects)
+        .concat(this.bodies);
+
+      var allCharacters = [this.player].concat(this.robbers);
       var rayTracer     = generateRayTracer(allCharacters);
 
       thinkSpawn(dt, this.robbers, this.state);
       thinkRobbers(dt, this.robbers, rayTracer);
       thinkFiring(allCharacters, this.effects, rayTracer);
-      thinkDead(this.player, this.robbers, this.bodies);
+      thinkDead(this.player, this.robbers, this.bodies, this.ghosts);
 
     } else if (this.state.time == STATE_NIGHT) {
-      allCharacters = [this.player];
+      renderObjs  = [this.player].concat(this.ghosts)
+        .concat(this.puddles).concat(this.bodies);
+
+      thinkGhosts(dt, this.ghosts, this.player);
+      thinkReanimate(this.ghosts, this.robbers, this.puddles);
     }
+
+    thinkBounds([this.player].concat(this.ghosts)
+                .concat(this.bodies).concat(this.puddles));
 
     thinkEffects(dt, this.effects);
 
+    // remove old stuff
     this.effects = _.filter(this.effects, function (effect) {
       return effect.done !== true;
     });
-
     this.robbers = _.filter(this.robbers, function (robber) {
       return robber.dead !== true;
+    });
+    this.ghosts = _.filter(this.ghosts, function (ghost) {
+      return ghost.remove !== true;
+    });
+    this.bodies = _.filter(this.bodies, function (body) {
+      return body.remove !== true;
     });
 
     renderBackground(this.bufferContext);
@@ -773,8 +905,7 @@ define(function (require) {
       renderNight(dt, this.bufferContext, this.player);
     }
 
-    renderAll(this.bufferContext, allCharacters, this.bodies,
-              this.effects, this.state, dt);
+    renderAll(this.bufferContext, renderObjs, this.state, dt);
 
     drawBuffer(this.canvasContext, this.buffer);
   }
