@@ -26,7 +26,7 @@ define(function (require) {
   var PLAYER_SPEED = 80;
   var ROBBER_SPEED = 40;
 
-  var ROBBER_SPAWN_INTERVAL = 5;
+  var ROBBER_SPAWN_INTERVAL = 2;
   var ROBBER_SPAWN_SCALE    = 0.9;
   var MAX_ROBBERS           = 16;
 
@@ -47,9 +47,11 @@ define(function (require) {
 
   var LIGHTNING_RENDER_TIME = 0.5;
 
-  var GHOST_ATTRACTIVE_FORCE = 160;
-  var GHOST_REPULSE_FORCE    = 40;
-  var GHOST_MAX_SPEED        = 60;
+  var GHOST_ATTR_FORCE    = 160;
+  var GHOST_MAX_SPEED     = 60;
+  var GHOST_REPL_FORCE    = 80;
+  var GHOST_RAND_FORCE    = 160;
+  var GHOST_RAND_INTERVAL = 1;
 
   var _imageCache = {};
   function png2Image(png) {
@@ -762,7 +764,7 @@ define(function (require) {
     }
   }
 
-  function thinkWaitBodies(dt, bodies, robbers, puddles, effects) {
+  function thinkWaitBodies (dt, bodies, robbers, puddles, effects) {
     for (var i in bodies) {
       var body = bodies[i];
 
@@ -771,20 +773,13 @@ define(function (require) {
       }
       body.wait_time -= dt;
 
-      if (body.wait_time > 0) continue;
-
-      SOUNDS.thunder.play();
-      effects.push(createLightningEffect());
-
-      robbers.push(createRobberFromBody(body));
-      puddles.push(createPuddle(body));
-
-      body.remove = true;
-      body.ghost.remove = true;
+      if (body.wait_time < 0) {
+        body.reanimate = true;
+      }
     }
   }
 
-  function thinkBurningBodies(dt, bodies, puddles) {
+  function thinkBurningBodies (dt, bodies, puddles) {
     for (var i in bodies) {
       var body = bodies[i];
 
@@ -795,11 +790,11 @@ define(function (require) {
       }
       body.burn_time -= dt;
 
-      if (body.burn_time > 0) continue;
-
-      puddles.push(createPuddle(body));
-      body.remove = true;
-      body.ghost.remove = true;
+      if (body.burn_time < 0) {
+        puddles.push(createPuddle(body));
+        body.remove = true;
+        body.ghost.remove = true;
+      }
     }
   }
 
@@ -849,28 +844,37 @@ define(function (require) {
 
   function thinkGhosts(dt, ghosts, player) {
     for (var i in ghosts) {
-      var ghost0 = ghosts[i];
-      ghost0.fx = 0;
-      ghost0.fy = 0;
+      var ghost = ghosts[i];
+
+      ghost.fx = 0;
+      ghost.fy = 0;
 
       // repulsive force
       for (var j in ghosts) {
-        if (j === i) continue;
-        var ghost1 = ghosts[j];
-
-        var dx = ghost1.x - ghost0.x;
-        var dy = ghost1.y - ghost0.y;
-        var d  = Math.sqrt(dx*dx + dy*dy);
-        ghost0.fx -= GHOST_REPULSE_FORCE * dx / d;
-        ghost0.fy -= GHOST_REPULSE_FORCE * dy / d;
+        var ghost2 = ghosts[j];
+        //var dx =
       }
 
       // attractive force
-      var dx = player.x - ghost0.x;
-      var dy = player.y - ghost0.y;
+      var dx = player.x - ghost.x;
+      var dy = player.y - ghost.y;
       var d  = Math.sqrt(dx*dx + dy*dy);
-      ghost0.fx += GHOST_ATTRACTIVE_FORCE * dx / d;
-      ghost0.fy += GHOST_ATTRACTIVE_FORCE * dy / d;
+      if (d > 0) {
+        ghost.fx += GHOST_ATTR_FORCE * dx / d;
+        ghost.fy += GHOST_ATTR_FORCE * dy / d;
+      }
+
+      // random force
+      if (ghost.randomFTime === undefined
+          || ghost.randomFTime < 0) {
+        ghost.randomFTime = Math.random() * (GHOST_RAND_INTERVAL + 0.5);
+        ghost.randomFx = GHOST_RAND_FORCE * (Math.random() - 0.5);
+        ghost.randomFy = GHOST_RAND_FORCE * (Math.random() - 0.5);
+      }
+      ghost.randomFTime -= dt;
+
+      ghost.fx += ghost.randomFx;
+      ghost.fy += ghost.randomFy;
     }
 
     for (var i in ghosts) {
@@ -900,7 +904,8 @@ define(function (require) {
     for (var i in ghosts) {
       var ghost = ghosts[i];
       var body  = ghost.body;
-      if (ghost.reanimate !== true) continue;
+      if (body.reanimate !== true && ghost.reanimate !== true)
+        continue;
 
       SOUNDS.thunder.play();
       effects.push(createLightningEffect());
@@ -921,7 +926,7 @@ define(function (require) {
     }
   }
 
-  function thinkDead (player, robbers, bodies, ghosts) {
+  function thinkHealth (player, robbers, bodies, ghosts) {
     for (var i in robbers) {
       var robber = robbers[i];
       if (robber.health <= 0) {
@@ -996,7 +1001,7 @@ define(function (require) {
       thinkSpawn(dt, this.robbers, this.state);
       thinkRobbers(dt, this.robbers, rayTracer);
       thinkFiring(allCharacters, this.effects, rayTracer);
-      thinkDead(this.player, this.robbers, this.bodies, this.ghosts);
+      thinkHealth(this.player, this.robbers, this.bodies, this.ghosts);
       thinkEffects(dt, this.effects);
       thinkWaitBodies(dt, this.bodies, this.robbers, this.puddles, this.effects);
 
@@ -1006,12 +1011,12 @@ define(function (require) {
         .concat(this.lightnings);
 
       thinkGhosts(dt, this.ghosts, this.player);
-      thinkReanimate(this.ghosts, this.robbers, this.puddles, this.lightnings);
-      thinkLightnings(dt, this.lightnings);
       thinkLightFires(this.player, this.bodies);
       thinkBurningBodies(dt, this.bodies, this.puddles);
     }
 
+    thinkReanimate(this.ghosts, this.robbers, this.puddles, this.lightnings);
+    thinkLightnings(dt, this.lightnings);
     thinkBounds([this.player].concat(this.ghosts)
                 .concat(this.bodies).concat(this.puddles));
 
@@ -1042,10 +1047,7 @@ define(function (require) {
     }
 
     renderAll(this.bufferContext, renderObjs, this.state, dt);
-
-    if (this.state.time === STATE_NIGHT) {
-      renderLightnings(this.bufferContext, this.lightnings);
-    }
+    renderLightnings(this.bufferContext, this.lightnings);
 
     drawBuffer(this.canvasContext, this.buffer);
   }
