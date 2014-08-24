@@ -10,8 +10,12 @@ define(function (require) {
   var WIDTH  = 20 * 12 * 3;
   var HEIGHT = 5 * 12 * 3;
 
-  var STATE_DAY = 0;
-  var STATE_NIGHT = 1;
+  var TIME_DAY = 0;
+  var TIME_NIGHT = 1;
+
+  var STATE_INTRO = 0;
+  var STATE_PLAY  = 1;
+  var STATE_DONE  = 2;
 
   var SPRITE_WIDTH  = 14 * 3;
   var SPRITE_HEIGHT = 14 * 3;
@@ -21,13 +25,13 @@ define(function (require) {
   var BODY_SIZE   = 10 * 3;
   var GHOST_SIZE  = 8 * 3;
 
-  var PLAYER_HEALTH = 10;
+  var PLAYER_HEALTH = 1;
 
-  var PLAYER_SPEED = 80;
+  var PLAYER_SPEED = 100;
   var ROBBER_SPEED = 40;
 
-  var ROBBER_SPAWN_INTERVAL = 2;
-  var ROBBER_SPAWN_SCALE    = 0.9;
+  var ROBBER_SPAWN_INTERVAL = 5;
+  var ROBBER_SPAWN_SCALE    = 0.95;
   var MAX_ROBBERS           = 16;
 
   var RECOIL_SOURCE = 4;
@@ -38,8 +42,8 @@ define(function (require) {
   var ROBBER_FIRE_DELAY    = 0.25;
   var ROBBER_COOLDOWN_TIME = 0.25;
 
-  var BODY_WAIT_TIME = 6;
-  var BODY_BURN_TIME = 1;
+  var BODY_WAIT_TIME = 5;
+  var BODY_BURN_TIME = 2;
 
   var GUNFIRE_OFFSET_X    = 5 * 3;
   var GUNFIRE_OFFSET_Y    = 1 * 3;
@@ -48,10 +52,10 @@ define(function (require) {
   var LIGHTNING_RENDER_TIME = 0.5;
 
   var GHOST_ATTR_FORCE    = 160;
-  var GHOST_MAX_SPEED     = 60;
-  var GHOST_REPL_FORCE    = 80;
-  var GHOST_RAND_FORCE    = 160;
+  var GHOST_REPL_FORCE    = 50;
+  var GHOST_RAND_FORCE    = 80;
   var GHOST_RAND_INTERVAL = 1;
+  var GHOST_MAX_SPEED     = 70;
 
   var _imageCache = {};
   function png2Image(png) {
@@ -94,9 +98,11 @@ define(function (require) {
   }
 
   SOUNDS = {
-    gunfire: new H.Howl({urls: ['audio/shot.wav']}),
-    step:    new H.Howl({urls: ['audio/step.wav']}),
-    thunder: new H.Howl({urls: ['audio/thunder.wav']})
+    gunfire:      new H.Howl({urls: ['audio/shot.wav'], volume: 0.1}),
+    step:         new H.Howl({urls: ['audio/step.wav'], volume: 0.16}),
+    thunder:      new H.Howl({urls: ['audio/thunder.wav'], volume: 0.1}),
+    crackle:      new H.Howl({urls: ['audio/crackle.wav'], loop: true, volume: 1}),
+    crackle_soft: new H.Howl({urls: ['audio/crackle_soft.wav'], loop: true, volume: 0.5})
   }
 
   function setCharacterAnimation (character, animation) {
@@ -155,6 +161,11 @@ define(function (require) {
     context.restore();
   }
 
+  function renderPlayerInfo (player) {
+    $('#score').text(player.score);
+    $('#health').text(player.health);
+  }
+
   function clamp (num, min, max) {
       return num < min ? min : (num > max ? max : num);
   }
@@ -166,7 +177,8 @@ define(function (require) {
     40: 's',
     189: '-',
     187: '=',
-    32: ' '
+    32: ' ',
+    13: 'x'
   }
 
   function bindInputs (inputs) {
@@ -307,6 +319,36 @@ define(function (require) {
     context.drawImage(buffer, 0, 0);
   }
 
+  function thinkPreferences (inputs) {
+    if (inputs.m) {
+      $('#mute').click();
+      inputs.m = false;
+    }
+    if (inputs.p) {
+      $('#pause').click();
+      inputs.p = false;
+    }
+  }
+
+  var _paused = false;
+  function bindPreferences() {
+    $('#mute').change(function () {
+      if ($(this).is(':checked')) {
+        H.Howler.mute();
+      } else {
+        H.Howler.unmute();
+      }
+    });
+    $('#pause').change(function () {
+      if ($(this).is(':checked')) {
+        _paused = true;
+      } else {
+        _paused = false;
+      }
+    });
+  }
+  function isPaused () { return _paused; }
+
   var Game = function () {
     this.canvas  = $('#canvas')[0];
     this.canvasContext = this.canvas.getContext('2d');
@@ -325,7 +367,8 @@ define(function (require) {
     this.state = {
       robber_next_spawn:     ROBBER_SPAWN_INTERVAL,
       robber_spawn_interval: ROBBER_SPAWN_INTERVAL,
-      time:                  STATE_DAY
+      time:                  TIME_NIGHT,
+      state:                 STATE_INTRO
     }
 
     this.player     = createPlayer();
@@ -336,7 +379,9 @@ define(function (require) {
     this.effects    = [];
     this.lightnings = [];
 
-    H.Howler.volume(0.1);
+    H.Howler.volume(0.5);
+
+    bindPreferences();
 
     this.t = 0;
     this.runLoop();
@@ -396,7 +441,7 @@ define(function (require) {
 
     if (inputs[' ']) {
       inputs[' '] = false;
-      if (state.time === STATE_DAY) {
+      if (state.time === TIME_DAY) {
         player.firing = true;
         player.x -= player.dir * RECOIL_SOURCE;
       }
@@ -467,11 +512,12 @@ define(function (require) {
 
   function createPlayer () {
     return {
-      x: WIDTH / 2,
-      y: HEIGHT / 2,
+      x: WIDTH * 0.75,
+      y: HEIGHT * 0.6,
       size:   PLAYER_SIZE,
       type:   'player',
-      health: PLAYER_HEALTH
+      health: PLAYER_HEALTH,
+      score:  0
     }
   }
 
@@ -779,7 +825,7 @@ define(function (require) {
     }
   }
 
-  function thinkBurningBodies (dt, bodies, puddles) {
+  function thinkBurningBodies (dt, bodies, puddles, player) {
     for (var i in bodies) {
       var body = bodies[i];
 
@@ -794,50 +840,53 @@ define(function (require) {
         puddles.push(createPuddle(body));
         body.remove = true;
         body.ghost.remove = true;
+        player.score ++;
       }
     }
   }
 
-  var _mute = false;
-  function thinkAudio (inputs) {
-    if (inputs.m) {
-      inputs.m = false;
-      _mute = !_mute;
-      if (_mute) {
-        H.Howler.mute();
+  var _crackle = false;
+  var _crackle_soft = false;
+  function thinkCrackle(state, bodies, player) {
+    function isBurning () {
+      return _.any(bodies, function (body) {
+         return body.burning;
+      });
+    }
+
+    var isNight = state.time === TIME_NIGHT;
+
+    var shouldCrackle = isNight && isBurning();
+    var shouldCrackleSoft = isNight;
+
+    if (shouldCrackle != _crackle) {
+      if (shouldCrackle) {
+        SOUNDS.crackle.play();
+        _crackle = true;
       } else {
-        H.Howler.unmute();
+        SOUNDS.crackle.stop();
+        _crackle = false;
       }
     }
 
-    if (inputs['-']) {
-      inputs['-'] = false;
-      H.Howler.volume(H.Howler.volume() - 0.05);
+    if (shouldCrackleSoft != _crackle_soft) {
+      if (shouldCrackleSoft) {
+        SOUNDS.crackle_soft.play();
+        _crackle_soft = true;
+      } else {
+        SOUNDS.crackle_soft.stop();
+        _crackle_soft = false;
+      }
     }
-
-    if (inputs['=']) {
-      inputs['='] = false;
-      H.Howler.volume(H.Howler.volume() + 0.05);
-    }
-  }
-
-  var _paused = false;
-  function thinkPaused (inputs) {
-    if (inputs.p) {
-      inputs.p = false;
-      _paused = !_paused;
-    }
-
-    return _paused;
   }
 
   function thinkState(state, inputs) {
     if (inputs.x) {
       inputs.x = false;
-      if (state.time === STATE_DAY) {
-        state.time = STATE_NIGHT;
-      } else if (state.time === STATE_NIGHT) {
-        state.time = STATE_DAY;
+      if (state.time === TIME_DAY) {
+        state.time = TIME_NIGHT;
+      } else if (state.time === TIME_NIGHT) {
+        state.time = TIME_DAY;
       }
     }
   }
@@ -852,7 +901,17 @@ define(function (require) {
       // repulsive force
       for (var j in ghosts) {
         var ghost2 = ghosts[j];
-        //var dx =
+        if (i === j) continue;
+
+        var dx = ghost2.x - ghost.x;
+        var dy = ghost2.y - ghost.y;
+        var d  = Math.sqrt(dx*dx + dy*dy);
+        if (d === 0) continue;
+
+        var dSq = Math.max(1.0, Math.pow(d / 36.0, 2));
+        var f = GHOST_REPL_FORCE / dSq;
+        ghost.fx -= f * dx / d;
+        ghost.fy -= f * dy / d;
       }
 
       // attractive force
@@ -979,18 +1038,37 @@ define(function (require) {
     }
   }
 
+  var _initalRender = false;
   Game.prototype.step = function(dt) {
-    if (thinkPaused(this.inputs)) {
+    if (this.state.state === STATE_INTRO) {
+      // once user has swapped dimensions, move to play!
+      if (this.state.time === TIME_DAY) {
+        $('.titleContainer').remove();
+        this.state.state = STATE_PLAY
+      }
+    } else if (this.state.state === STATE_PLAY) {
+      // once user has died, no more play :(
+      if (this.player.health <= 0) {
+        $('.endContainer').show();
+      }
+    }
+
+    this.stepPlay(dt);
+  }
+
+  Game.prototype.stepPlay = function(dt) {
+    thinkPreferences(this.inputs);
+
+    if (isPaused()) {
       return;
     }
 
     thinkState(this.state, this.inputs);
-    thinkAudio(this.inputs);
     thinkPlayer(dt, this.inputs, this.player, this.state);
 
     var renderObjs = [];
 
-    if (this.state.time == STATE_DAY) {
+    if (this.state.time == TIME_DAY) {
       renderObjs  = [this.player].concat(this.robbers)
         .concat(this.puddles).concat(this.effects)
         .concat(this.bodies);
@@ -1005,16 +1083,17 @@ define(function (require) {
       thinkEffects(dt, this.effects);
       thinkWaitBodies(dt, this.bodies, this.robbers, this.puddles, this.effects);
 
-    } else if (this.state.time == STATE_NIGHT) {
+    } else if (this.state.time == TIME_NIGHT) {
       renderObjs  = [this.player].concat(this.ghosts)
         .concat(this.puddles).concat(this.bodies)
         .concat(this.lightnings);
 
       thinkGhosts(dt, this.ghosts, this.player);
       thinkLightFires(this.player, this.bodies);
-      thinkBurningBodies(dt, this.bodies, this.puddles);
+      thinkBurningBodies(dt, this.bodies, this.puddles, this.player);
     }
 
+    thinkCrackle(this.state, this.bodies, this.player);
     thinkReanimate(this.ghosts, this.robbers, this.puddles, this.lightnings);
     thinkLightnings(dt, this.lightnings);
     thinkBounds([this.player].concat(this.ghosts)
@@ -1038,7 +1117,7 @@ define(function (require) {
     });
 
     renderBackground(this.bufferContext);
-    if (this.state.time === STATE_NIGHT) {
+    if (this.state.time === TIME_NIGHT) {
       var lights = _.filter(this.bodies, function (body) {
         return body.burning;
       });
@@ -1048,6 +1127,8 @@ define(function (require) {
 
     renderAll(this.bufferContext, renderObjs, this.state, dt);
     renderLightnings(this.bufferContext, this.lightnings);
+
+    renderPlayerInfo(this.player);
 
     drawBuffer(this.canvasContext, this.buffer);
   }
