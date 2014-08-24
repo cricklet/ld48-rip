@@ -4,19 +4,23 @@
     <style>
     @font-face { font-family: pixel; src: url('fonts/04B_03__.TTF'); }
     body { font-family: pixel; }
-    .main { margin-left: auto; margin-right: auto; width: 720px; }
+    .main {
+      margin-left: auto; margin-right: auto; width: 720px;
+      position: relative;
+      min-height: 100%;
+    }
     .gameContainer { position: relative; }
-    .left { float: left; width: 50%; }
-    .right { float: right; width: 40%; text-align: left; }
+    .left { display: inline-block; width: 50%; padding-left: 4px; }
+    .right { display: inline-block; width: 40%; text-align: left; }
     .titleContainer {
-      position: absolute; left: 12px; top: 8px;
+      position: absolute; left: 20px; top: 16px;
       color: #fff;
     }
-    #title { font-size: 40px; }
+    #title { font-size: 40px; margin-bottom: 6px; }
     h1, h2, h3, h4 { margin: 0; margin-bottom: 0.1em; }
     .endContainer {
       position: absolute; left: 0; right: 0; top: 0; bottom: 0;
-      background-color: rgba(0,0,0,0.3);
+      background-color: rgba(100,0,0,0.3);
       color: #fff;
       display: none;
     }
@@ -28,6 +32,14 @@
       width: 100%;
       text-align: center;
     }
+    .footer {
+      position: absolute;
+      bottom: 8px;
+      color: #888;
+    }
+    .footer a:link { color: #777; }
+    .footer a:visited { color: #77a; }
+    .footer a:hover { color: #999; }
     </style>
   </head>
   <body>
@@ -36,32 +48,44 @@
         <canvas id="canvas"></canvas>
         <div class="titleContainer">
           <div id="title">Rest In Peace</div>
-          <div id="subtitle">(swap dimensions to begin)</div>
+          <div id="subtitle">Swap dimensions to begin.</div>
         </div>
         <div class="endContainer">
-          <div id="end">The End</div>
+          <div id="end">Game Over.</div>
         </div>
       </div>
       <br/>
       <div class="left">
-        <div>Score: <span id="score"></span></div>
-        <div>Health: <span id="health"></span></div>
+        <div>
+          Score: <span id="score"></span>,
+          Health: <span id="health"></span>
+        </div>
         <br/>
         <div>
           Robbers come back to life unless you burn their bodies
           in the alternate dimension.</div>
       </div>
       <div class="right">
-        <div>
+        <div style="height:1em">
           <input type="checkbox" id="mute"> Mute (m)</input>,
           <input type="checkbox" id="pause"> Pause (p)</input>
         </div>
         <br/>
         <div>
-          <div>Movement: WASD or arrow keys</div>
-          <div>Shoot gun: &lt;space&gt;</div>
-          <div>Swap dimensions: x or &lt;enter&gt</div>
+          <div>Move: WASD or arrow keys</div>
+          <div>Shoot: &lt;space&gt;</div>
+          <div>Swap: x or &lt;enter&gt</div>
         </div>
+      </div>
+
+      <br/><br/>
+      <div class="footer">
+        <p>This game was made (from scratch) by Kenrick Rilee for the
+           Ludum Dare 30 Compo in 48 hours.</p>
+        <a href="https://github.com/cricklet/ld48-rip">source code</a>
+        <a href="http://cricklet.tumblr.com">tumblr</a>
+        <a href="http://twitter.com/@kenrickrilee">twitter</a>
+        <a href="https://github.com/cricklet">github</a>
       </div>
     </div>
   </body>

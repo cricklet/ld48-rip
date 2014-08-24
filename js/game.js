@@ -25,7 +25,7 @@ define(function (require) {
   var BODY_SIZE   = 10 * 3;
   var GHOST_SIZE  = 8 * 3;
 
-  var PLAYER_HEALTH = 1;
+  var PLAYER_HEALTH = 5;
 
   var PLAYER_SPEED = 100;
   var ROBBER_SPEED = 40;
@@ -1041,19 +1041,23 @@ define(function (require) {
   var _initalRender = false;
   Game.prototype.step = function(dt) {
     if (this.state.state === STATE_INTRO) {
+      this.stepPlay(dt);
       // once user has swapped dimensions, move to play!
       if (this.state.time === TIME_DAY) {
         $('.titleContainer').remove();
         this.state.state = STATE_PLAY
       }
+
     } else if (this.state.state === STATE_PLAY) {
+      this.stepPlay(dt);
       // once user has died, no more play :(
       if (this.player.health <= 0) {
         $('.endContainer').show();
+        this.state.state = STATE_END;
       }
+    } else {
+      // do nothing!
     }
-
-    this.stepPlay(dt);
   }
 
   Game.prototype.stepPlay = function(dt) {
