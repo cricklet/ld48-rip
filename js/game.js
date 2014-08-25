@@ -40,7 +40,7 @@ define(function (require) {
 
   var ROBBER_STOP_TIME     = 0.25;
   var ROBBER_AIM_TIME      = 3.0;
-  var ROBBER_FIRE_DELAY    = 0.25;
+  var ROBBER_FIRE_DELAY    = 0.05;
   var ROBBER_COOLDOWN_TIME = 0.25;
 
   var BODY_WAIT_TIME = 5;
