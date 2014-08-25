@@ -30,9 +30,10 @@ define(function (require) {
   var PLAYER_SPEED = 100;
   var ROBBER_SPEED = 40;
 
-  var ROBBER_SPAWN_INTERVAL = 5;
-  var ROBBER_SPAWN_SCALE    = 0.95;
-  var MAX_ROBBERS           = 16;
+  var SPAWN_T     = 5;
+  var SPAWN_SCALE = 0.95;
+  var SPAWN_NUM_T = 12;
+  var MAX_SPAWNED = 16;
 
   var RECOIL_SOURCE = 4;
   var RECOIL_TARGET = 6;
@@ -51,11 +52,11 @@ define(function (require) {
 
   var LIGHTNING_RENDER_TIME = 0.5;
 
-  var GHOST_ATTR_FORCE    = 160;
-  var GHOST_REPL_FORCE    = 50;
-  var GHOST_RAND_FORCE    = 80;
+  var GHOST_ATTR_FORCE    = 400;
+  var GHOST_REPL_FORCE    = 200;
+  var GHOST_RAND_FORCE    = 100;
   var GHOST_RAND_INTERVAL = 1;
-  var GHOST_MAX_SPEED     = 70;
+  var GHOST_MAX_SPEED     = 80;
 
   var _imageCache = {};
   function png2Image(png) {
@@ -365,10 +366,12 @@ define(function (require) {
     bindInputs(this.inputs);
 
     this.state = {
-      robber_next_spawn:     ROBBER_SPAWN_INTERVAL,
-      robber_spawn_interval: ROBBER_SPAWN_INTERVAL,
-      time:                  TIME_NIGHT,
-      state:                 STATE_INTRO
+      spawn_interval: SPAWN_T,
+      spawn_t:        SPAWN_T,
+      spawn_num:      1,
+      spawn_num_t:    SPAWN_NUM_T,
+      time:           TIME_NIGHT,
+      state:          STATE_INTRO
     }
 
     this.player     = createPlayer();
@@ -459,9 +462,17 @@ define(function (require) {
   }
 
   function createRobber () {
+    var x, y;
+    if (Math.random() < 0.2) {
+      x = Math.random() < 0.5 ? -ROBBER_SIZE / 2 : WIDTH + ROBBER_SIZE / 2;
+      y = Math.random() * HEIGHT;
+    } else {
+      x = Math.random() * WIDTH;
+      y = Math.random() < 0.5 ? -ROBBER_SIZE / 2 : HEIGHT + ROBBER_SIZE / 2;
+    }
     return {
-      x: Math.random() < 0.5 ? -ROBBER_SIZE / 2 : WIDTH + ROBBER_SIZE / 2,
-      y: Math.random() * HEIGHT,
+      x: x,
+      y: y,
       size:  ROBBER_SIZE,
       type:  'robber',
       health: 1
@@ -560,7 +571,7 @@ define(function (require) {
     robber.run_y = y;
   }
 
-  function thinkRobberRun (dt, robber) {
+  function thinkRobberRun (dt, robber, player) {
     if (robber.run_x == undefined || robber.run_y == undefined) {
       chooseRobberRunGoal(robber);
     }
@@ -576,7 +587,7 @@ define(function (require) {
     }
   }
 
-  function thinkRobberStop (dt, robber) {
+  function thinkRobberStop (dt, robber, player) {
     if (robber.stop_time == undefined) {
       robber.stop_time = ROBBER_STOP_TIME;
     }
@@ -584,7 +595,7 @@ define(function (require) {
     robber.vx = 0;
     robber.vy = 0;
     robber.v  = 0;
-    robber.dir = robber.x < WIDTH / 2 ? 1 : -1;
+    robber.dir = robber.x < player.x ? 1 : -1;
 
     robber.stop_time -= dt;
     if (robber.stop_time < 0) {
@@ -594,7 +605,7 @@ define(function (require) {
     }
   }
 
-  function thinkRobberAim (dt, robber, rayTracer) {
+  function thinkRobberAim (dt, robber, player, rayTracer) {
     if (robber.aim_time == undefined) {
       robber.aim_time = ROBBER_AIM_TIME * Math.random()
                         + ROBBER_AIM_TIME / 2;
@@ -644,12 +655,12 @@ define(function (require) {
     }
   }
 
-  function thinkRobber (dt, robber, rayTracer) {
+  function thinkRobber (dt, robber, player, rayTracer) {
     if (robber.state === undefined) {
       robber.state = ROBBER_RUN;
     }
 
-    ROBBER_THINKS[robber.state](dt, robber, rayTracer);
+    ROBBER_THINKS[robber.state](dt, robber, player, rayTracer);
 
     var animation = 'robber';
 
@@ -666,10 +677,10 @@ define(function (require) {
     robber.animation = animation;
   }
 
-  function thinkRobbers (dt, robbers, rayTracer) {
+  function thinkRobbers (dt, robbers, player, rayTracer) {
     for (var i in robbers) {
       var robber = robbers[i];
-      thinkRobber(dt, robber, rayTracer);
+      thinkRobber(dt, robber, player, rayTracer);
     }
   }
 
@@ -711,15 +722,21 @@ define(function (require) {
   }
 
   function thinkSpawn(dt, robbers, state) {
-    state.robber_next_spawn -= dt;
+    state.spawn_t -= dt;
+    state.spawn_num_t -= dt;
 
-    if (state.robber_next_spawn > 0) return;
+    if (state.spawn_t < 0 && robbers.length < MAX_SPAWNED)  {
+      for (var i = 0; i < state.spawn_num; i ++) {
+        robbers.push(createRobber());
+      }
+      state.spawn_interval *= SPAWN_SCALE;
+      state.spawn_t        = state.spawn_interval;
+    }
 
-    if (robbers.length >= MAX_ROBBERS) return;
-
-    robbers.push(createRobber());
-    state.robber_spawn_interval *= ROBBER_SPAWN_SCALE;
-    state.robber_next_spawn     = state.robber_spawn_interval;
+    if (state.spawn_num_t < 0) {
+      state.spawn_num ++;
+      state.spawn_num_t = SPAWN_NUM_T;
+    }
   }
 
   function thinkFiring(all, effects, rayTracer) {
@@ -1081,7 +1098,7 @@ define(function (require) {
       var rayTracer     = generateRayTracer(allCharacters);
 
       thinkSpawn(dt, this.robbers, this.state);
-      thinkRobbers(dt, this.robbers, rayTracer);
+      thinkRobbers(dt, this.robbers, this.player, rayTracer);
       thinkFiring(allCharacters, this.effects, rayTracer);
       thinkHealth(this.player, this.robbers, this.bodies, this.ghosts);
       thinkEffects(dt, this.effects);
