@@ -25,7 +25,7 @@ define(function (require) {
   var BODY_SIZE   = 10 * 3;
   var GHOST_SIZE  = 8 * 3;
 
-  var PLAYER_HEALTH = 5;
+  var PLAYER_HEALTH = 10;
 
   var PLAYER_SPEED = 100;
   var ROBBER_SPEED = 40;
@@ -972,6 +972,7 @@ define(function (require) {
 
       if (d < ghost.size / 2 + player.size / 2) {
         ghost.reanimate = true;
+        player.health --;
       }
     }
   }
