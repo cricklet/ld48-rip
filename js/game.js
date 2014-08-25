@@ -1071,7 +1071,7 @@ define(function (require) {
       // once user has died, no more play :(
       if (this.player.health <= 0) {
         $('.endContainer').show();
-        this.state.state = STATE_END;
+        this.state.state = STATE_DONE;
       }
     } else {
       // do nothing!
