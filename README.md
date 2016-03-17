@@ -1,3 +1,5 @@
+![http://cricklet.github.io/images/rip.gif](http://cricklet.github.io/images/rip.gif)
+
 ### Rest In Peace
 
 I built this in Javascript/HTML5 from scratch for the Ludum Dare 48 hour gamedev competition.
