@@ -10,7 +10,7 @@ In this game, you hop between alternate dimensions to kill bandits. The ghosts o
 
 ### Developer notes:
 
-I built the game from scratch in Javascript. As an experiment, I wanted to organize my code without using much OOP. The state of the game (player, bandits, ghosts, etc) is simply stored in arrays of JS objects (basically JSON). Then, different functions (like thinkPlayer or renderPlayer) take those objects and manipulate them. It lead to some awkwardness— i.e. I pass the player object to nearly every function— but worked well enough for the jam. This method is *very* good for sharing state (i.e. player location, bodies) between the two dimensions.
+I built the game from scratch in Javascript over ~48 hours for the Ludum Dare. The state of the game (player, bandits, ghosts, etc) is simply stored in arrays of JS objects. Then, different functions (like thinkPlayer or renderPlayer) take those objects and manipulate them. It lead to some awkwardness— eg. I pass the player object to nearly every function— but worked well enough for the jam. This method is *very* good for sharing state (i.e. player location, bodies) between the two dimensions.
 
 I spent a lot of time on the art. The background is procedurally drawn by randomly peppering a pixellated gradient with squares of dark and light. The lighting in the dark dimension is drawn by painting a flickering semi-transparent radial gradient on top of each light source (the player’s torch and burning bodies). It’s amazing how much something like adding a flicker to the lighting can improve the atmosphere.
 
