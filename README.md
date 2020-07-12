@@ -2,8 +2,6 @@
 
 ### Rest In Peace
 
-I built this in Javascript/HTML5 from scratch for the Ludum Dare 48 hour gamedev competition.
-
 In this game, you hop between alternate dimensions to kill bandits. The ghosts of the dead haunt one dimension and the dead come back to life in the other!
 
 [You can play it here](https://dl.dropboxusercontent.com/u/43674030/ludlum/index.html)
